@@ -4,7 +4,7 @@ A mini-framework for Tornado for creating RESTful APIs
 
 ##### 目标
 
-- 简单易用的RestFul框架，不适合复杂的业务逻辑，通过API支持良好的CRUD风格
+- 简单易用的RestFul框架，可定制，通过API支持良好的CRUD风格
 - 用户侧重关心module这一层，框架来完成数据到数据api的跨越
 - 使用适配器来接驳不同的数据库，ORM框架
 - 自动生成url path route
