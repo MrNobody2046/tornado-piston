@@ -1,4 +1,5 @@
 import tornado.web
+import tornado.gen
 import functools
 import copy
 
@@ -10,16 +11,37 @@ class RestFulApiGenerator(type):
     api_route = [
 
     ]
+
+    """ automatically generate api route
+
+        GET & POST mapping to /schema
+        PUT & DELETE mapping to /schema/*primarykey_pattern*
+
+        Query Some One for /schema/_search
+        List All  /schema/_list?start=0&count=10
+
+
+
+    """
+
+    method2route_pattern = {
+        "GET":"",
+        "POST":"",
+
+
+    }
+
     api_prefix = ''
 
     def __new__(mcs, name, bases, attributes):
         print name, bases, attributes
-        resource_name = attributes.get("resource_name") or name.lower()
+        resource_name = attributes.get("resource_name") or name
         primary_key_format = attributes.get("primary_key_format") or "(\w+)"
+        route = mcs.format_route_path(resource_name, primary_key_format)
         added_methods = {}
         for origin_method, data_opt in mcs.method_map.items():
             added_methods[origin_method] = mcs.processing(attributes[data_opt])
-
+        # mcs.add_handler_to_route()
         attributes.update(added_methods)
         return type.__new__(mcs, name, bases, attributes)
 
@@ -45,7 +67,7 @@ class RestFulApiGenerator(type):
 
     @classmethod
     def format_route_path(mcs, resource_name, primary_key_format, path_type=""):
-        pass
+        return '/'.join((mcs.api_prefix, resource_name, primary_key_format))
 
     @classmethod
     def add_handler_to_route(mcs, handler, route):
