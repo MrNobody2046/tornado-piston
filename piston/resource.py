@@ -1,12 +1,16 @@
+# coding:utf-8
+import json
+import inspect
+
 import tornado.web
 import tornado.gen
 import functools
-import copy
+import abc
 
 
 class RestFulApiGenerator(type):
-    method_map = {'get': 'read', 'post': 'create',
-                  'put': 'update', 'delete': 'remove'}
+    METHOD_MAP = {'get': 'read', 'post': 'create',
+                  'put': 'update', 'delete': 'delete'}
 
     api_route = [
 
@@ -14,8 +18,8 @@ class RestFulApiGenerator(type):
 
     """ automatically generate api route
 
-        GET & POST mapping to /schema
-        PUT & DELETE mapping to /schema/*primarykey_pattern*
+        GET & POST wrap_original to /schema
+        PUT & DELETE wrap_original to /schema/*pk_pattern*
 
         Query Some One for /schema/_search
         List All  /schema/_list?start=0&count=10
@@ -24,40 +28,48 @@ class RestFulApiGenerator(type):
 
     """
 
-    method2route_pattern = {
-        "GET":"",
-        "POST":"",
-
+    route2handler = {
+        "read/write": ("POST", "GET"),
+        "update/delete": ("PUT", "DELETE"),
+        "list": ()
 
     }
 
     api_prefix = ''
 
     def __new__(mcs, name, bases, attributes):
-        print name, bases, attributes
-        resource_name = attributes.get("resource_name") or name
-        primary_key_format = attributes.get("primary_key_format") or "(\w+)"
-        route = mcs.format_route_path(resource_name, primary_key_format)
-        added_methods = {}
-        for origin_method, data_opt in mcs.method_map.items():
-            added_methods[origin_method] = mcs.processing(attributes[data_opt])
-        # mcs.add_handler_to_route()
-        attributes.update(added_methods)
+        # print name, bases, attributes
+        for http_method, instance_method in mcs.METHOD_MAP.items():
+            if attributes.has_key(instance_method):
+                attributes[http_method] = mcs.wrap_original(attributes[instance_method])
         return type.__new__(mcs, name, bases, attributes)
 
-    @staticmethod
-    def processing(method):
+    @classmethod
+    def wrap_original(mcs, method):
+        """
+        return http request handling method
+        :param method:
+        :return:
+        """
+
+        def handler_request(*args, **kwargs):
+            instance = args[0]
+            try:
+                if inspect.isgenerator(method):
+                    tornado.gen.coroutine(method)
+                else:
+                    instance.build_response(method(*args, **kwargs))
+            except Exception, error:
+                return instance.handler_error(error)
+
         @functools.wraps(method)
         def wrapper(*args, **kwargs):
             instance = args[0]
-            try:
-                instance.prepare_request(*args, **kwargs)
-            except Exception, e:
-                pass
-            try:
-                return method(*args, **kwargs)
-            except Exception, error:
-                return args[0].error_handle(error)
+            for mt in [mcs.logging_process(instance.prepare_request),
+                       lambda: handler_request(*args, **kwargs),
+                       mcs.logging_process(instance.finish_request)]:
+                print instance, "Execute", mt
+                mt()
 
         return wrapper
 
@@ -66,25 +78,76 @@ class RestFulApiGenerator(type):
         pass
 
     @classmethod
-    def format_route_path(mcs, resource_name, primary_key_format, path_type=""):
-        return '/'.join((mcs.api_prefix, resource_name, primary_key_format))
-
-    @classmethod
     def add_handler_to_route(mcs, handler, route):
         mcs.api_route.append((route, handler))
+
+    @classmethod
+    def logging_process(mcs, method):
+        @functools.wraps(method)
+        def wrapper(*args, **kwargs):
+            try:
+                return method(*args, **kwargs)
+            except Exception, e:
+                print "EEE", e
+                pass
+                # TODO logging
+
+        return wrapper
+
+
+class BaseRequestLoader(object):
+    def load(self, body):
+        pass
+
+
+class BaseResponseBuilder(object):
+    def build(self, obj):
+        """
+        return string
+        :param data:
+        :return: string
+        """
+        print obj, "OOOO"
+        return json.dumps(obj)
 
 
 class Resource(tornado.web.RequestHandler):
     __metaclass__ = RestFulApiGenerator
-    sub_resources = ()
-    resource_name = None
-    primary_key_format = "(\w+)"
+    SUPPORTED_METHODS = set(tornado.web.RequestHandler.SUPPORTED_METHODS)
+
+    response_string = ""
+    request_obj = None
+
+    @classmethod
+    def allow(cls, methods):
+        """
+        return subclass of current class , block methods not allowed
+        :param methods:
+        :return:
+        """
+        if isinstance(methods, basestring):
+            methods = [methods]
+        methods = set([_.upper() for _ in methods])
+        blocked = cls.SUPPORTED_METHODS - methods
+        new_class = type(cls.__name__, (cls,), {})
+        for blocked_method in blocked:
+            setattr(new_class, blocked_method, getattr(tornado.web.RequestHandler, blocked_method.lower()))
+        return new_class
 
     def prepare_request(self):
-        pass
+        if self.request.method in {"POST", "PUT"}:
+            self.load_request()
+        else:
+            pass
 
-    def auth(self):
-        pass
+    def load_request(self):
+        self.request_obj = json.loads(self.request.body)
+
+    def build_response(self, obj):
+        self.response_string = json.dumps(obj)
+
+    def finish_request(self):
+        self.write(self.response_string)
 
     def initialize(self):
         pass
@@ -98,7 +161,7 @@ class Resource(tornado.web.RequestHandler):
     def update(self):
         pass
 
-    def remove(self):
+    def delete(self):
         pass
 
     def query(self):
@@ -107,8 +170,33 @@ class Resource(tornado.web.RequestHandler):
     def list_all(self):
         pass
 
-    def error_handle(self, error):
+    def handler_error(self, error):
+        print error
+
+
+class ORMInterface(object):
+    def create(self):
         pass
 
-    def build_response(self):
+    def update(self):
         pass
+
+    def read(self):
+        pass
+
+    def delete(self):
+        pass
+
+
+class ResourceInterface(object):
+    def from_json(self, jdata):
+        """
+        :param jdata: dict instance
+        :return:
+        """
+
+    def to_json(self):
+        """
+
+        :return:
+        """
