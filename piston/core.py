@@ -4,8 +4,11 @@ import inspect
 
 import tornado.web
 import tornado.gen
+from tornado.log import gen_log
+
 import functools
 import abc
+import utils
 
 
 class RestFulApiGenerator(type):
@@ -55,10 +58,7 @@ class RestFulApiGenerator(type):
         def handler_request(*args, **kwargs):
             instance = args[0]
             try:
-                if inspect.isgenerator(method):
-                    tornado.gen.coroutine(method)
-                else:
-                    instance.build_response(method(*args, **kwargs))
+                instance.write_response(method(*args, **kwargs))
             except Exception, error:
                 return instance.handler_error(error)
 
@@ -71,6 +71,19 @@ class RestFulApiGenerator(type):
                 print instance, "Execute", mt
                 mt()
 
+        @tornado.gen.coroutine
+        @functools.wraps(method)
+        def gen(*args, **kwargs):
+            instance = args[0]
+            mcs.logging_process(instance.prepare_request)
+            for _ in method(*args, **kwargs):
+                yield _
+            mcs.logging_process(instance.finish_request)
+
+        print "Register", method, inspect.isgeneratorfunction(method)
+        if inspect.isgeneratorfunction(method):
+            print ">>>>"
+            return gen
         return wrapper
 
     @classmethod
@@ -95,23 +108,7 @@ class RestFulApiGenerator(type):
         return wrapper
 
 
-class BaseRequestLoader(object):
-    def load(self, body):
-        pass
-
-
-class BaseResponseBuilder(object):
-    def build(self, obj):
-        """
-        return string
-        :param data:
-        :return: string
-        """
-        print obj, "OOOO"
-        return json.dumps(obj)
-
-
-class Resource(tornado.web.RequestHandler):
+class BaseHandler(tornado.web.RequestHandler):
     __metaclass__ = RestFulApiGenerator
     SUPPORTED_METHODS = set(tornado.web.RequestHandler.SUPPORTED_METHODS)
 
@@ -141,13 +138,21 @@ class Resource(tornado.web.RequestHandler):
             pass
 
     def load_request(self):
-        self.request_obj = json.loads(self.request.body)
+        """
+        load post json data
+        :return:
+        """
+        self.request_obj = utils.DotDict(**json.loads(self.request.body))
 
-    def build_response(self, obj):
+    def write_response(self, obj, finish=True):
         self.response_string = json.dumps(obj)
+        if not self._finished:
+            self.write(self.response_string)
+            if finish:
+                self.finish()
 
     def finish_request(self):
-        self.write(self.response_string)
+        pass
 
     def initialize(self):
         pass
@@ -200,3 +205,17 @@ class ResourceInterface(object):
 
         :return:
         """
+
+
+import http_codes
+
+
+class BaseException(Exception):
+    code = http_codes.INTERNAL_SERVER_ERROR  # default error
+    msg = http_codes.code_message(code)
+
+    def __init__(self, code=None, msg=None):
+        if code:
+            self.code = code
+        self.msg = msg or self.msg or http_codes.code_message(self.code)
+        super(BaseException, self).__init__(self.msg)
