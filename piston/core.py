@@ -12,13 +12,6 @@ import utils
 
 
 class RestFulApiGenerator(type):
-    METHOD_MAP = {'get': 'read', 'post': 'create',
-                  'put': 'update', 'delete': 'delete'}
-
-    api_route = [
-
-    ]
-
     """ automatically generate api route
 
         GET & POST wrap_original to /schema
@@ -31,6 +24,13 @@ class RestFulApiGenerator(type):
 
     """
 
+    METHOD_MAP = {'get': 'read', 'post': 'create',
+                  'put': 'update', 'delete': 'delete'}
+
+    api_route = [
+
+    ]
+
     route2handler = {
         "read/write": ("POST", "GET"),
         "update/delete": ("PUT", "DELETE"),
@@ -38,13 +38,14 @@ class RestFulApiGenerator(type):
 
     }
 
-    api_prefix = ''
-
     def __new__(mcs, name, bases, attributes):
-        # print name, bases, attributes
+        print name, bases, attributes
         for http_method, instance_method in mcs.METHOD_MAP.items():
-            if attributes.has_key(instance_method):
+            if attributes.has_key(instance_method) and not attributes.has_key(http_method):
                 attributes[http_method] = mcs.wrap_original(attributes[instance_method])
+            elif attributes.has_key(http_method):
+                attributes["orig_" + http_method] = attributes[http_method]
+                attributes[http_method] = mcs.wrap_original(attributes[http_method])
         return type.__new__(mcs, name, bases, attributes)
 
     @classmethod
@@ -55,7 +56,7 @@ class RestFulApiGenerator(type):
         :return:
         """
 
-        def handler_request(*args, **kwargs):
+        def handle_request(*args, **kwargs):
             instance = args[0]
             try:
                 instance.write_response(method(*args, **kwargs))
@@ -63,17 +64,17 @@ class RestFulApiGenerator(type):
                 return instance.handler_error(error)
 
         @functools.wraps(method)
-        def wrapper(*args, **kwargs):
+        def normal_wrapper(*args, **kwargs):
             instance = args[0]
             for mt in [mcs.logging_process(instance.prepare_request),
-                       lambda: handler_request(*args, **kwargs),
+                       lambda: handle_request(*args, **kwargs),
                        mcs.logging_process(instance.finish_request)]:
                 print instance, "Execute", mt
                 mt()
 
         @tornado.gen.coroutine
         @functools.wraps(method)
-        def gen(*args, **kwargs):
+        def generator_wrapper(*args, **kwargs):
             instance = args[0]
             mcs.logging_process(instance.prepare_request)
             for _ in method(*args, **kwargs):
@@ -82,9 +83,9 @@ class RestFulApiGenerator(type):
 
         print "Register", method, inspect.isgeneratorfunction(method)
         if inspect.isgeneratorfunction(method):
-            print ">>>>"
-            return gen
-        return wrapper
+            return generator_wrapper
+        else:
+            return normal_wrapper
 
     @classmethod
     def building_api(mcs, name, bases, attributes, methods):
@@ -176,35 +177,7 @@ class BaseHandler(tornado.web.RequestHandler):
         pass
 
     def handler_error(self, error):
-        print error
-
-
-class ORMInterface(object):
-    def create(self):
-        pass
-
-    def update(self):
-        pass
-
-    def read(self):
-        pass
-
-    def delete(self):
-        pass
-
-
-class ResourceInterface(object):
-    def from_json(self, jdata):
-        """
-        :param jdata: dict instance
-        :return:
-        """
-
-    def to_json(self):
-        """
-
-        :return:
-        """
+        raise error
 
 
 import http_codes
