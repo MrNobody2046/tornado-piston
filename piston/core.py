@@ -39,7 +39,6 @@ class RestFulApiGenerator(type):
     }
 
     def __new__(mcs, name, bases, attributes):
-        print name, bases, attributes
         for http_method, instance_method in mcs.METHOD_MAP.items():
             if attributes.has_key(instance_method) and not attributes.has_key(http_method):
                 attributes[http_method] = mcs.wrap_original(attributes[instance_method])

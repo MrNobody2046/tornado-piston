@@ -1,1 +1,1 @@
-from resource import *
+from core import *

@@ -42,11 +42,11 @@ class DotDict(dict):
         if isinstance(data, dict):
             for k, v in data.items():
                 data[k] = cls.convert(v)
-            data[k] = cls.convert(v)
             return DotDict(**data)
         elif isinstance(data, list):
             data[0:] = [cls.convert(v) for v in data]
         return data
+
 
 
 json_dumps = lambda x, **kwargs: json.dumps(x, cls=DateTimeEncoder, **kwargs)
