@@ -1,11 +1,19 @@
-from setuptools import setup, find_packages
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+try:
+    from setuptools import setup, find_packages
+except ImportError:
+    import ez_setup
+    ez_setup.use_setuptools()
+    from setuptools import setup, find_packages
 
 
 scripts = []
 version = 0.2
 
 setup(
-    name="tornado",
+    name="tornado-piston",
     version=version,
     packages=find_packages(),
     scripts=scripts,
@@ -28,9 +36,19 @@ setup(
     # metadata for upload to PyPI
     author="Kenny Zhang",
     author_email="sphy@foxmail.com",
-    description='the restfull framework base on tornado',
+    description='The mini-framework based on Tornado, make easier to setup a data api',
     license="BSD",
-    keywords="restfull tornado api  http",
+    keywords="tornado api restfull",
     url="https://github.com/philoprove/tornado-piston",
+    classifiers = [
+        'Development Status :: Alpha',
+        'Framework :: Tornado',
+        'Intended Audience :: Developers',
+        'License :: OSI Approved :: BSD License',
+        'Operating System :: OS Independent',
+        'Programming Language :: Python :: 2.7',
+        'Topic :: Internet :: WWW/HTTP',
+    ]
     # could also include long_description, download_url, classifiers, etc.
 )
+
