@@ -11,7 +11,7 @@ import abc
 import utils
 
 
-class RestFulApiGenerator(type):
+class HandlerWrapper(type):
     """ automatically generate api route
 
         GET & POST wrap_original to /schema
@@ -109,7 +109,7 @@ class RestFulApiGenerator(type):
 
 
 class BaseHandler(tornado.web.RequestHandler):
-    __metaclass__ = RestFulApiGenerator
+    __metaclass__ = HandlerWrapper
     SUPPORTED_METHODS = set(tornado.web.RequestHandler.SUPPORTED_METHODS)
 
     response_string = ""
